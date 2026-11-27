@@ -1,5 +1,5 @@
 # ---- Image de production du backend ----
-FROM node:24-alpine
+FROM node:26-alpine
 
 ENV NODE_ENV=production \
     PORT=5000 \
