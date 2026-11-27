@@ -1,0 +1,5 @@
+# Copier en blackbox.yml sur le serveur et remplacer par vos domaines.
+- targets: ["https://app.mon-projet.duckdns.org/api/health"]
+  labels: { env: prod }
+- targets: ["https://preprod.mon-projet.duckdns.org/api/health"]
+  labels: { env: preprod }

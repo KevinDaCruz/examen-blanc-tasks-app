@@ -1,0 +1,34 @@
+# Reverse-proxy HTTPS commun aux deux environnements.
+# Démarrage : docker compose --env-file .env up -d   (dans infra/proxy/)
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant}
+      PROD_DOMAIN: ${PROD_DOMAIN:?PROD_DOMAIN manquant}
+      PREPROD_DOMAIN: ${PREPROD_DOMAIN:?PREPROD_DOMAIN manquant}
+      GRAFANA_DOMAIN: ${GRAFANA_DOMAIN:?GRAFANA_DOMAIN manquant}
+      PREPROD_BASIC_AUTH_USER: ${PREPROD_BASIC_AUTH_USER:-preprod}
+      PREPROD_BASIC_AUTH_HASH: ${PREPROD_BASIC_AUTH_HASH:?PREPROD_BASIC_AUTH_HASH manquant}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificats : à conserver (limites de Let's Encrypt)
+      - caddy-config:/config
+    networks: [tasks-prod-net, tasks-preprod-net, monitoring-net]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+volumes:
+  caddy-data:
+  caddy-config:
+
+networks:
+  tasks-prod-net: { external: true }
+  tasks-preprod-net: { external: true }
+  monitoring-net: { external: true }
