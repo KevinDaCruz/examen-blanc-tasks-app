@@ -15,6 +15,9 @@ const noHtml = (value, helpers) => (/<[^>]*>/.test(value) ? helpers.error('strin
 
 const messages = {
   'string.html': '{{#label}} ne doit pas contenir de HTML',
+  'string.base': '{{#label}} doit être une chaîne de caractères',
+  'boolean.base': '{{#label}} doit être vrai ou faux',
+  'object.base': 'Le corps de la requête doit être un objet JSON',
   'string.empty': '{{#label}} est obligatoire',
   'any.required': '{{#label}} est obligatoire',
   'string.min': '{{#label}} doit contenir au moins {{#limit}} caractères',
