@@ -1,0 +1,59 @@
+# Workflow réutilisable : déploie un tag d'image sur le serveur via SSH.
+#
+# Secrets requis (par environnement GitHub "preprod" / "production") :
+#   SSH_HOST          IP ou nom du serveur
+#   SSH_USER          utilisateur de déploiement (deploy)
+#   SSH_PRIVATE_KEY   clé privée ed25519 dédiée à la CI
+#   SSH_KNOWN_HOSTS   sortie de : ssh-keyscan -t ed25519 <SSH_HOST>
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment: { required: true, type: string }
+      tag: { required: true, type: string }
+      url: { required: true, type: string }
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.url }}
+    permissions:
+      contents: read
+      packages: read
+    env:
+      APP_DIR: /opt/tasks-app
+      TARGET: ${{ inputs.environment == 'production' && 'prod' || 'preprod' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configuration SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Copie des fichiers de déploiement
+        run: |
+          rsync -az --delete-after \
+            --filter='P .env*' --filter='P .deployed-*' --filter='P deployments.log' --filter='P backups/' \
+            --filter='P infra/proxy/.env' --filter='P infra/monitoring/.env' \
+            --filter='P infra/monitoring/prometheus/targets/*.yml' \
+            --include='docker-compose.yml' --include='deploy.sh' \
+            --include='docker/***' --include='infra/***' --exclude='*' \
+            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APP_DIR}/"
+
+      - name: Déploiement (pull + up + healthcheck + rollback auto)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "echo '$GHCR_TOKEN' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null \
+             && cd ${APP_DIR} && ./deploy.sh ${TARGET} ${{ inputs.tag }}; rc=\$?; docker logout ghcr.io >/dev/null; exit \$rc"
+
+      - name: Test de fumée HTTPS
+        run: |
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${{ inputs.url }}/api/health"
