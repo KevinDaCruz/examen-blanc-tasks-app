@@ -20,7 +20,27 @@ L'application est composée de trois services légers (nginx, Node.js, MongoDB),
 
 **Fournisseurs envisagés** (Ubuntu 24.04, 2 vCPU, 2 à 4 Go de RAM, environ 40 Go de disque) : Hetzner Cloud CX22 (UE), Scaleway (France), OVHcloud VPS (France), ou DigitalOcean (crédit offert par le GitHub Student Pack).
 
-> Fournisseur retenu : **_à compléter_** · Datacenter : **_à compléter_** · IP publique : **_à compléter_**
+**Recommandation, alignée sur les consignes** (AWS, GCP, Render ou Scaleway, avec MongoDB Atlas et Let's Encrypt) :
+
+- **Scaleway** : instance DEV1-S ou PLAY2 à Paris (PAR1). Fournisseur français, données hébergées en France (RGPD), facturation à l'heure, console simple, IPv4 publique incluse.
+- **MongoDB Atlas** pour la base, avec deux bases séparées (pré-production et production) sur un cluster M0 gratuit, hébergé chez AWS à Paris (`eu-west-3`). C'est un service managé : haute disponibilité (replica set de 3 nœuds), chiffrement au repos et en transit (TLS), liste blanche d'IP (seule l'IP du VPS est autorisée), et utilisateurs à droits limités (`readWrite` sur une seule base).
+- **Let's Encrypt** via Caddy, pour les certificats HTTPS automatiques.
+
+Le `docker-compose.yml` accepte les **deux modes de base de données**. Avec `MONGO_URI=mongodb+srv://…` dans le `.env` de l'environnement, l'API utilise Atlas. Si la variable est vide, `deploy.sh` démarre un conteneur MongoDB authentifié (profil `local-db`), ce qui sert pour le développement ou comme solution de repli.
+
+> Fournisseur retenu : **_à compléter_** · Datacenter : **_à compléter_** · IP publique : **_à compléter_** · Base : **_Atlas / conteneur_**
+
+### Mise en place de MongoDB Atlas (si retenu)
+
+1. Sur <https://cloud.mongodb.com>, créer un cluster **M0 (Free)**, fournisseur AWS, région **Paris (eu-west-3)**.
+2. Dans *Database Access*, créer deux utilisateurs avec un mot de passe fort et le rôle **readWrite** limité à une seule base :
+   - `tasks_preprod`, sur la base `tasks_preprod` ;
+   - `tasks_prod`, sur la base `tasks_prod`.
+3. Dans *Network Access*, n'autoriser **que l'IP publique du VPS**, jamais `0.0.0.0/0`.
+4. Dans *Connect → Drivers*, copier la chaîne de connexion et la placer dans chaque fichier d'environnement :
+   - `.env.preprod` : `MONGO_URI=mongodb+srv://tasks_preprod:<mdp>@<cluster>.mongodb.net/tasks_preprod?retryWrites=true&w=majority`
+   - `.env.prod` : `MONGO_URI=mongodb+srv://tasks_prod:<mdp>@<cluster>.mongodb.net/tasks_prod?retryWrites=true&w=majority`
+5. Supervision : l'onglet *Metrics* d'Atlas complète Prometheus (connexions, opérations par seconde, stockage), et on peut y configurer des alertes Atlas. Sauvegardes : l'offre M0 n'en fait pas automatiquement, donc on planifie un `mongodump` avec l'URI Atlas.
 
 ---
 
@@ -44,7 +64,7 @@ L'application est composée de trois services légers (nginx, Node.js, MongoDB),
 ```
 
 - Chaque environnement est un projet Docker Compose isolé (`tasks-prod`, `tasks-preprod`) avec sa propre base, ses propres secrets et son propre réseau.
-- MongoDB est sur un réseau Docker `internal` : il n'a ni accès Internet ni port publié.
+- MongoDB est sur un réseau Docker `internal` : il n'a ni accès Internet ni port publié. Avec Atlas, les conteneurs `mongo-*` disparaissent et l'API se connecte en TLS au cluster managé, qui n'autorise que l'IP du VPS.
 - Le frontend (nginx) sert le build React et relaie `/api` vers l'API, ce qui permet d'avoir une seule origine : cookie `SameSite=Strict` et pas de CORS cross-site.
 
 ---

@@ -29,6 +29,19 @@ ENV_FILE=".env.${ENV_NAME}"
 [ -f "$ENV_FILE" ] || die "$ENV_FILE introuvable (copier .env.example et remplir les secrets)"
 command -v docker >/dev/null || die "docker n'est pas installé"
 
+# Base de données : MongoDB Atlas si MONGO_URI est renseigné, sinon conteneur MongoDB local.
+env_value() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- | sed -e "s/^['\"]//" -e "s/['\"]$//"; }
+if [ -n "$(env_value MONGO_URI)" ]; then
+  log "base de données : MongoDB externe (Atlas)"
+  export COMPOSE_PROFILES=""
+else
+  for v in MONGO_ROOT_USER MONGO_ROOT_PASSWORD MONGO_APP_USER MONGO_APP_PASSWORD; do
+    [ -n "$(env_value "$v")" ] || die "$v manquant dans $ENV_FILE (ou renseigner MONGO_URI pour Atlas)"
+  done
+  log "base de données : conteneur MongoDB (profil local-db)"
+  export COMPOSE_PROFILES="local-db"
+fi
+
 PROJECT="tasks-${ENV_NAME}"
 NETWORK="tasks-${ENV_NAME}-net"
 STATE_FILE=".deployed-${ENV_NAME}"
