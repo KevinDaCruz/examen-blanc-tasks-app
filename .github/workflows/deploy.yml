@@ -27,7 +27,7 @@ jobs:
       APP_DIR: /opt/tasks-app
       TARGET: ${{ inputs.environment == 'production' && 'prod' || 'preprod' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Configuration SSH
         run: |
