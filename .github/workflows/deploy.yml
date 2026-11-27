@@ -49,10 +49,16 @@ jobs:
       - name: Déploiement (pull + up + healthcheck + rollback auto)
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          TAG: ${{ inputs.tag }}
         run: |
-          ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-            "echo '$GHCR_TOKEN' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null \
-             && cd ${APP_DIR} && ./deploy.sh ${TARGET} ${{ inputs.tag }}; rc=\$?; docker logout ghcr.io >/dev/null; exit \$rc"
+          # Le token GHCR transite par stdin (jamais dans la ligne de commande visible via ps).
+          echo "$GHCR_TOKEN" | ssh "$SSH_TARGET" "docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null"
+          rc=0
+          # shellcheck disable=SC2029 # variables volontairement développées côté runner
+          ssh "$SSH_TARGET" "cd ${APP_DIR} && ./deploy.sh ${TARGET} ${TAG}" || rc=$?
+          ssh "$SSH_TARGET" "docker logout ghcr.io >/dev/null" || true
+          exit "$rc"
 
       - name: Test de fumée HTTPS
         run: |
