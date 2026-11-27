@@ -35,7 +35,7 @@ L'application est composée de trois services légers (nginx, Node.js, MongoDB),
            tasks-prod-net   │              │           │ monitoring-net
           ┌─────────────────▼─┐  ┌─────────▼─────────┐ ┌▼──────────────────────────────┐
           │ frontend-prod     │  │ frontend-preprod  │ │ Grafana ◄─ Prometheus ─► Alert │
-          │ nginx (non-root)  │  │ (mot de passe)    │ │   manager (e-mail)             │
+          │ nginx (non-root)  │  │ (mot de passe)    │ │   manager ──► ntfy (push)      │
           │   │ /api          │  │   │ /api          │ │ Blackbox (sondes HTTPS + TLS)  │
           │ backend-prod      │  │ backend-preprod   │ │ node-exporter (serveur)        │
           │   │ réseau interne│  │   │               │ └────────────────────────────────┘
@@ -201,7 +201,7 @@ docker exec tasks-prod-backend-1 sh -c 'grep login_failed /app/logs/audit.log | 
 
 ```bash
 cd /opt/tasks-app/infra/monitoring
-cp .env.example .env                                        # mot de passe Grafana, SMTP, destinataire
+cp .env.example .env                                        # mot de passe Grafana, URL du topic ntfy
 cp prometheus/targets/blackbox.yml.example prometheus/targets/blackbox.yml   # vos domaines
 docker compose up -d
 ```
@@ -220,9 +220,31 @@ Grafana est accessible sur `https://monitoring.<domaine>` (tableau de bord *Appl
 | DisquePresquePlein | Moins de 15 % d'espace libre | avertissement |
 | CpuSature | CPU > 90 % pendant 10 min | avertissement |
 
-Les alertes sont envoyées **par e-mail** (Alertmanager, SMTP). Elles sont regroupées par environnement, les alertes critiques de production sont répétées toutes les 30 minutes, et une alerte « site inaccessible » masque les alertes secondaires.
+**Canal de notification : ntfy (notifications push).** Aucun serveur SMTP n'étant fourni, Alertmanager envoie les alertes par webhook à [ntfy.sh](https://ntfy.sh), un service open source gratuit et sans compte. On reçoit les alertes sur son téléphone (application ntfy, Android ou iOS) ou dans le navigateur (`https://ntfy.sh/<topic>`).
 
-**Tester une alerte** : `docker compose -p tasks-preprod stop backend`. Après environ 2 minutes, l'e-mail « SiteInaccessible preprod » arrive ; on relance ensuite le backend, ce qui envoie un e-mail « resolved ».
+1. Générer un nom de topic impossible à deviner : `echo "tasks-alertes-$(openssl rand -hex 8)"`. Il fait office de secret, car quiconque le connaît peut lire les alertes.
+2. Le renseigner dans `infra/monitoring/.env` : `NTFY_URL=https://ntfy.sh/<topic>`.
+3. S'abonner à ce topic dans l'application ntfy.
+
+Le template `alertmanager` de ntfy met en forme le message (titre, gravité, instance, résumé, description). Le niveau de priorité dépend de la gravité :
+
+| Alerte | Priorité ntfy | Rappel |
+|--------|---------------|--------|
+| Critique en production | `urgent` (sonnerie même en mode silencieux) | toutes les 30 min |
+| Critique en pré-production | `high` | toutes les 4 h |
+| Avertissement | `default` | toutes les 4 h |
+
+Les alertes sont regroupées par environnement, un message « resolved » est envoyé au retour à la normale, et une alerte « site inaccessible » masque les alertes secondaires.
+
+Pour ne dépendre d'aucun service externe, ntfy peut aussi être auto-hébergé (image `binwiederhier/ntfy`). Autre option : un serveur SMTP gratuit comme Brevo (300 e-mails/jour), à configurer avec `email_configs` dans Alertmanager.
+
+**Tester une alerte** : `docker compose -p tasks-preprod stop backend`. Après environ 2 minutes, la notification « SiteInaccessible preprod » arrive. On relance ensuite le backend, ce qui envoie une notification « resolved ». On peut aussi injecter directement une fausse alerte dans Alertmanager :
+
+```bash
+docker compose exec alertmanager wget -qO- --header "Content-Type: application/json" \
+  --post-data '[{"labels":{"alertname":"Test","env":"prod","severity":"critical"},"annotations":{"summary":"Alerte de test"}}]' \
+  http://localhost:9093/api/v2/alerts
+```
 
 Alternative plus simple : **Uptime Kuma** (sondes HTTP avec page de statut).
 

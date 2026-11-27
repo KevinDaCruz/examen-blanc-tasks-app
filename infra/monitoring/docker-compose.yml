@@ -20,23 +20,14 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.28.1
     restart: unless-stopped
-    # Les secrets SMTP sont injectés au démarrage dans le modèle de configuration.
+    # L'URL du topic ntfy (secret : quiconque la connaît peut lire les alertes) est injectée au démarrage.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        sed -e "s|__SMTP_SMARTHOST__|$$SMTP_SMARTHOST|g" \
-            -e "s|__SMTP_FROM__|$$SMTP_FROM|g" \
-            -e "s|__SMTP_USER__|$$SMTP_USER|g" \
-            -e "s|__SMTP_PASSWORD__|$$SMTP_PASSWORD|g" \
-            -e "s|__ALERT_EMAIL_TO__|$$ALERT_EMAIL_TO|g" \
-            /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml &&
+        sed -e "s|__NTFY_URL__|$$NTFY_URL|g" /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml &&
         exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     environment:
-      SMTP_SMARTHOST: ${SMTP_SMARTHOST:?SMTP_SMARTHOST manquant}
-      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM manquant}
-      SMTP_USER: ${SMTP_USER:?SMTP_USER manquant}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD manquant}
-      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:?ALERT_EMAIL_TO manquant}
+      NTFY_URL: ${NTFY_URL:?NTFY_URL manquant}
     volumes:
       - ./alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
       - alertmanager-data:/alertmanager

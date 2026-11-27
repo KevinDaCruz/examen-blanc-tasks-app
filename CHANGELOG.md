@@ -55,7 +55,7 @@ conteneurisation, CI/CD, journalisation et supervision (E21 à E26).
 - **Qualité** : ESLint et Prettier dans les deux projets, vérifiés par la CI.
 - **Documentation (E29)** : JSDoc sur tout le backend (routes, middlewares, modèles) et sur les composants React. Génération HTML avec `npm run docs`, vers `docs/api-backend/` et `docs/frontend/`.
 - **Journalisation (E25)** : Winston (JSON en production, console lisible en dev), logs d'accès HTTP morgan, fichiers `error.log`, `combined.log` et `audit.log` avec rotation, journal d'audit sécurité (inscriptions, connexions, échecs, accès refusés, CORS rejetés), module `debug` pour le développement.
-- **Supervision (E26)** : `GET /api/health` (état de l'API et de MongoDB) et `GET /metrics` (Prometheus). Pile Prometheus, Alertmanager (e-mail), Blackbox, node-exporter et Grafana avec tableau de bord. 9 alertes : site inaccessible, API down, latence p95 > 500 ms, erreurs 5xx > 5 %, mémoire, brute force, certificat TLS, disque, CPU.
+- **Supervision (E26)** : `GET /api/health` (état de l'API et de MongoDB) et `GET /metrics` (Prometheus). Pile Prometheus, Alertmanager (notifications push **ntfy**, faute de serveur SMTP fourni), Blackbox, node-exporter et Grafana avec tableau de bord. 9 alertes : site inaccessible, API down, latence p95 > 500 ms, erreurs 5xx > 5 %, mémoire, brute force, certificat TLS, disque, CPU.
 - **Conteneurisation (E24)** : Dockerfiles (image backend non-root avec healthcheck ; frontend multi-stage servi par nginx non-root), `docker-compose.yml` (MongoDB authentifié, réseau interne, volumes, rotation des logs), `deploy.sh` (healthchecks, test de fumée, rollback automatique).
 - **CI/CD (E24)** : GitHub Actions (lint, tests, audit, build et push des images sur GHCR, scan Trivy, déploiement automatique en pré-production sur `develop` et en production sur `main` avec approbation manuelle).
 - **Hébergement (E21 à E23)** : reverse-proxy Caddy (HTTPS Let's Encrypt automatique, HSTS, pré-production protégée par mot de passe et non indexée), script de durcissement du VPS, sauvegardes MongoDB.
@@ -73,6 +73,6 @@ conteneurisation, CI/CD, journalisation et supervision (E21 à E26).
 
 - Version initiale fournie pour l'examen (application de gestion de tâches React / Express / MongoDB).
 
-[Non publié]: https://github.com/OWNER/REPO/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/OWNER/REPO/compare/v1.0.0...v2.0.0
-[1.0.0]: https://github.com/OWNER/REPO/releases/tag/v1.0.0
+[Non publié]: https://github.com/KevinDaCruz/examen-blanc-tasks-app/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/KevinDaCruz/examen-blanc-tasks-app/compare/v1.0.0...v2.0.0
+[1.0.0]: https://github.com/KevinDaCruz/examen-blanc-tasks-app/releases/tag/v1.0.0

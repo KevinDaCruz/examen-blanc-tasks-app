@@ -1,27 +1,35 @@
-# Modèle de configuration Alertmanager (les __VARIABLES__ sont remplacées au démarrage).
-global:
-  smtp_smarthost: "__SMTP_SMARTHOST__"
-  smtp_from: "__SMTP_FROM__"
-  smtp_auth_username: "__SMTP_USER__"
-  smtp_auth_password: "__SMTP_PASSWORD__"
-  smtp_require_tls: true
-
+# Modèle de configuration Alertmanager (__NTFY_URL__ est remplacé au démarrage).
+#
+# Pas de serveur SMTP disponible : les alertes sont envoyées en notifications push
+# via ntfy (https://ntfy.sh), gratuit et sans compte. On s'abonne au "topic" depuis
+# l'application mobile ntfy (Android / iOS) ou depuis https://ntfy.sh/<topic>.
+# Le template "alertmanager" de ntfy met en forme le message (titre, gravité, résumé).
 route:
-  receiver: email
+  receiver: ntfy
   group_by: [alertname, env]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
   routes:
-    # Les alertes critiques de production sont renvoyées plus souvent.
+    # Alertes critiques de production : priorité maximale (sonnerie) et rappel toutes les 30 min.
     - matchers: [severity="critical", env="prod"]
-      receiver: email
+      receiver: ntfy-urgent
       repeat_interval: 30m
+    - matchers: [severity="critical"]
+      receiver: ntfy-high
 
 receivers:
-  - name: email
-    email_configs:
-      - to: "__ALERT_EMAIL_TO__"
+  - name: ntfy
+    webhook_configs:
+      - url: "__NTFY_URL__?template=alertmanager&priority=default&tags=warning"
+        send_resolved: true
+  - name: ntfy-high
+    webhook_configs:
+      - url: "__NTFY_URL__?template=alertmanager&priority=high&tags=rotating_light"
+        send_resolved: true
+  - name: ntfy-urgent
+    webhook_configs:
+      - url: "__NTFY_URL__?template=alertmanager&priority=urgent&tags=rotating_light,fire"
         send_resolved: true
 
 inhibit_rules:

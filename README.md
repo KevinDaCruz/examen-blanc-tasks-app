@@ -14,7 +14,7 @@ Ce dépôt contient la version **2.0.0**, corrigée et prête pour la production
 Navigateur ──HTTPS──► Caddy (TLS Let's Encrypt)
                         ├── app.<domaine>      ──► frontend-prod    (nginx : fichiers React + proxy /api) ──► backend-prod    ──► mongo-prod
                         ├── preprod.<domaine>  ──► frontend-preprod (idem, protégé par mot de passe)      ──► backend-preprod ──► mongo-preprod
-                        └── monitoring.<domaine> ► Grafana ◄── Prometheus ◄── /metrics, Blackbox, node-exporter ──► Alertmanager (e-mail)
+                        └── monitoring.<domaine> ► Grafana ◄── Prometheus ◄── /metrics, Blackbox, node-exporter ──► Alertmanager ──► ntfy (push)
 ```
 
 ## Démarrage en développement
