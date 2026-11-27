@@ -58,6 +58,7 @@ conteneurisation, CI/CD, journalisation et supervision (E21 à E26).
 - **Supervision (E26)** : `GET /api/health` (état de l'API et de MongoDB) et `GET /metrics` (Prometheus). Pile Prometheus, Alertmanager (notifications push **ntfy**, faute de serveur SMTP fourni), Blackbox, node-exporter et Grafana avec tableau de bord. 9 alertes : site inaccessible, API down, latence p95 > 500 ms, erreurs 5xx > 5 %, mémoire, brute force, certificat TLS, disque, CPU.
 - **Conteneurisation (E24)** : Dockerfiles (image backend non-root avec healthcheck ; frontend multi-stage servi par nginx non-root), `docker-compose.yml` (MongoDB authentifié, réseau interne, volumes, rotation des logs), `deploy.sh` (healthchecks, test de fumée, rollback automatique).
 - **CI/CD (E24)** : GitHub Actions (lint, tests, audit, build et push des images sur GHCR, scan Trivy, déploiement automatique en pré-production sur `develop` et en production sur `main` avec approbation manuelle).
+- **Base de données au choix** : MongoDB Atlas (service managé, `MONGO_URI`) ou conteneur MongoDB (profil Compose `local-db`), selon l'environnement.
 - **Hébergement (E21 à E23)** : reverse-proxy Caddy (HTTPS Let's Encrypt automatique, HSTS, pré-production protégée par mot de passe et non indexée), script de durcissement du VPS, sauvegardes MongoDB.
 
 ### Modifié
