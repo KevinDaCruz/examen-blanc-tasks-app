@@ -26,6 +26,13 @@ apt-get update -q && apt-get upgrade -yq
 apt-get install -yq ca-certificates curl ufw fail2ban unattended-upgrades rsync
 dpkg-reconfigure -f noninteractive unattended-upgrades
 
+echo "==> Swap (2 Go) pour absorber les pics mémoire sur un petit VPS"
+if ! swapon --show | grep -q .; then
+  fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
+  grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
+  sysctl -q vm.swappiness=10 && echo 'vm.swappiness=10' >/etc/sysctl.d/99-swappiness.conf
+fi
+
 echo "==> Docker"
 if ! command -v docker >/dev/null; then
   curl -fsSL https://get.docker.com | sh
