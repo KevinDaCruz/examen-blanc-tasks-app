@@ -1,0 +1,44 @@
+# Reverse-proxy HTTPS (E22 / E23).
+# Caddy obtient et renouvelle AUTOMATIQUEMENT les certificats Let's Encrypt
+# pour chaque domaine ci-dessous (challenge HTTP-01 sur le port 80),
+# redirige HTTP -> HTTPS et active HTTP/2 / HTTP/3.
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+		-Via
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+# ---------- Production ----------
+{$PROD_DOMAIN} {
+	import common
+	reverse_proxy frontend-prod:8080
+}
+
+# ---------- Pré-production ----------
+# Non indexée, et protégée par mot de passe (sauf la sonde de santé utilisée par la supervision).
+{$PREPROD_DOMAIN} {
+	import common
+	header X-Robots-Tag "noindex, nofollow"
+	@protected not path /api/health
+	basic_auth @protected {
+		{$PREPROD_BASIC_AUTH_USER} {$PREPROD_BASIC_AUTH_HASH}
+	}
+	reverse_proxy frontend-preprod:8080
+}
+
+# ---------- Supervision (Grafana, authentification Grafana) ----------
+{$GRAFANA_DOMAIN} {
+	import common
+	reverse_proxy grafana:3000
+}

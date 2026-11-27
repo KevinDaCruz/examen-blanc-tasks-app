@@ -1,0 +1,31 @@
+# Modèle de configuration Alertmanager (les __VARIABLES__ sont remplacées au démarrage).
+global:
+  smtp_smarthost: "__SMTP_SMARTHOST__"
+  smtp_from: "__SMTP_FROM__"
+  smtp_auth_username: "__SMTP_USER__"
+  smtp_auth_password: "__SMTP_PASSWORD__"
+  smtp_require_tls: true
+
+route:
+  receiver: email
+  group_by: [alertname, env]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Les alertes critiques de production sont renvoyées plus souvent.
+    - matchers: [severity="critical", env="prod"]
+      receiver: email
+      repeat_interval: 30m
+
+receivers:
+  - name: email
+    email_configs:
+      - to: "__ALERT_EMAIL_TO__"
+        send_resolved: true
+
+inhibit_rules:
+  # Si le site est inaccessible, inutile d'envoyer aussi les alertes de latence/erreurs.
+  - source_matchers: [alertname="SiteInaccessible"]
+    target_matchers: [severity="warning"]
+    equal: [env]

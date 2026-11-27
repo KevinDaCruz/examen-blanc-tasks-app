@@ -1,0 +1,84 @@
+# Règles d'alerte adaptées à l'application (E26).
+groups:
+  - name: disponibilite
+    rules:
+      - alert: SiteInaccessible
+        expr: probe_success{job="blackbox-health"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Site {{ $labels.env }} inaccessible"
+          description: "La sonde HTTPS {{ $labels.instance }} échoue depuis 2 minutes (DNS, TLS, proxy, API ou base de données)."
+
+      - alert: ApiDown
+        expr: up{job="tasks-api"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "API {{ $labels.env }} injoignable"
+          description: "Prometheus ne parvient plus à collecter les métriques de {{ $labels.instance }}."
+
+  - name: performance
+    rules:
+      - alert: LatenceElevee
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, env) (rate(http_request_duration_seconds_bucket{route!="/metrics"}[5m]))
+          ) > 0.5
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Latence p95 > 500 ms ({{ $labels.env }})"
+          description: "95 % des requêtes prennent plus de {{ $value | humanizeDuration }} depuis 5 minutes."
+
+      - alert: TauxErreurs5xx
+        expr: |
+          sum by (env) (rate(http_requests_total{status_code=~"5.."}[5m]))
+            / sum by (env) (rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Plus de 5 % d'erreurs serveur ({{ $labels.env }})"
+          description: "Taux d'erreurs 5xx : {{ $value | humanizePercentage }}."
+
+      - alert: MemoireApiElevee
+        expr: process_resident_memory_bytes{job="tasks-api"} > 400 * 1024 * 1024
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Mémoire de l'API > 400 Mo ({{ $labels.env }})"
+          description: "Possible fuite mémoire."
+
+  - name: securite
+    rules:
+      - alert: BruteForceSuspecte
+        expr: sum by (env) (increase(auth_login_failures_total[5m])) > 20
+        labels: { severity: warning }
+        annotations:
+          summary: "Nombreux échecs de connexion ({{ $labels.env }})"
+          description: "{{ $value }} échecs de connexion en 5 minutes : tentative de brute force probable (voir audit.log)."
+
+      - alert: CertificatExpireBientot
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: "Certificat TLS de {{ $labels.instance }} expire dans moins de 14 jours"
+          description: "Le renouvellement automatique Let's Encrypt (Caddy) semble bloqué."
+
+  - name: serveur
+    rules:
+      - alert: DisquePresquePlein
+        expr: (node_filesystem_avail_bytes{mountpoint="/host",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/host",fstype!~"tmpfs|overlay"}) < 0.15
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Moins de 15 % d'espace disque libre"
+          description: "Risque d'arrêt de MongoDB et des logs."
+
+      - alert: CpuSature
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "CPU du serveur > 90 % depuis 10 minutes"

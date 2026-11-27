@@ -1,0 +1,92 @@
+# Supervision des deux environnements (E26) : métriques, sondes, alertes, tableaux de bord.
+# Démarrage : docker compose --env-file .env up -d   (dans infra/monitoring/)
+x-logging: &default-logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    networks: [monitoring-net, tasks-prod-net, tasks-preprod-net]
+    logging: *default-logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    # Les secrets SMTP sont injectés au démarrage dans le modèle de configuration.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed -e "s|__SMTP_SMARTHOST__|$$SMTP_SMARTHOST|g" \
+            -e "s|__SMTP_FROM__|$$SMTP_FROM|g" \
+            -e "s|__SMTP_USER__|$$SMTP_USER|g" \
+            -e "s|__SMTP_PASSWORD__|$$SMTP_PASSWORD|g" \
+            -e "s|__ALERT_EMAIL_TO__|$$ALERT_EMAIL_TO|g" \
+            /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml &&
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    environment:
+      SMTP_SMARTHOST: ${SMTP_SMARTHOST:?SMTP_SMARTHOST manquant}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM manquant}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER manquant}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD manquant}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:?ALERT_EMAIL_TO manquant}
+    volumes:
+      - ./alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
+      - alertmanager-data:/alertmanager
+    networks: [monitoring-net]
+    logging: *default-logging
+
+  # Sondes HTTP externes : disponibilité, latence, validité/expiration du certificat TLS.
+  blackbox:
+    image: prom/blackbox-exporter:v0.27.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [monitoring-net]
+    logging: *default-logging
+
+  # Métriques du serveur (CPU, RAM, disque, réseau).
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+    command: ["--path.rootfs=/host"]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [monitoring-net]
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD manquant}
+      GF_SERVER_ROOT_URL: https://${GRAFANA_DOMAIN}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks: [monitoring-net]
+    logging: *default-logging
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+
+networks:
+  monitoring-net: { external: true }
+  tasks-prod-net: { external: true }
+  tasks-preprod-net: { external: true }
