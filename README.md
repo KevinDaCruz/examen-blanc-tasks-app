@@ -1,101 +1,80 @@
+# Mes Tâches : application de gestion de tâches
 
-# Projet d'Entraînement : Application de Gestion de Tâches
+Application « To-Do List » : frontend **React 19 (Vite)**, API **Node.js / Express 5**, base **MongoDB**.
+Ce dépôt contient la version **2.0.0**, corrigée et prête pour la production. La version initiale comportait volontairement des bugs et des failles de sécurité.
 
-Bienvenue sur le projet d'entraînement pour l'évaluation "Mise en production et maintenance applicative". Cette application est une simple "To-Do List" composée d'un frontend en React et d'un backend en Node.js/Express.
+- Énoncé de l'exercice : [docs/CONSIGNES.md](docs/CONSIGNES.md)
+- Corrections apportées (bugs, failles) : [CHANGELOG.md](CHANGELOG.md)
+- Architecture, hébergement, CI/CD, logs, supervision : [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md)
+- Documentation générée depuis le code : [docs/api-backend/index.html](docs/api-backend/index.html) et [docs/frontend/index.html](docs/frontend/index.html)
 
-**Important** : Cette application a été intentionnellement conçue avec des bugs, des failles de sécurité et des mauvaises pratiques. Votre mission est de l'améliorer en suivant les consignes ci dessous et de faire la mise en production.
+## Architecture
 
-## 1. Installation et Lancement
+```
+Navigateur ──HTTPS──► Caddy (TLS Let's Encrypt)
+                        ├── app.<domaine>      ──► frontend-prod    (nginx : fichiers React + proxy /api) ──► backend-prod    ──► mongo-prod
+                        ├── preprod.<domaine>  ──► frontend-preprod (idem, protégé par mot de passe)      ──► backend-preprod ──► mongo-preprod
+                        └── monitoring.<domaine> ► Grafana ◄── Prometheus ◄── /metrics, Blackbox, node-exporter ──► Alertmanager (e-mail)
+```
 
-Ce projet utilise Node.js et MongoDB. Assurez-vous qu'ils sont installés sur votre système.
+## Démarrage en développement
 
-### a. Backend
+Prérequis : Node.js 22 ou plus récent, et MongoDB en local (ou `docker run -d -p 27017:27017 mongo:8`).
 
 ```bash
-# Allez dans le dossier du backend
+# Backend
 cd backend
-
-# Installez les dépendances
+cp .env.example .env              # puis renseigner JWT_SECRET : openssl rand -hex 32
 npm install
+npm run dev                       # http://localhost:5000  (rechargement automatique + logs debug)
 
-# Lancez le serveur (il se connectera à MongoDB)
-# Assurez-vous que votre service MongoDB est démarré
-npm start
-# Le serveur tournera sur http://localhost:5000
+# Frontend (autre terminal)
+cd frontend
+npm install
+npm run dev                       # http://localhost:3000  (/api est proxifié vers :5000)
 ```
 
-### b. Frontend
+## Démarrage avec Docker (comme en production)
 
 ```bash
-# Depuis un autre terminal, allez dans le dossier du frontend
-cd frontend
-
-# Installez les dépendances
-npm install
-
-# Lancez l'application React
-npm start
-# L'application s'ouvrira sur http://localhost:3000
+cp .env.example .env.local        # remplir les secrets ; ENV_NAME=local, PUBLIC_URL=http://localhost:8080, COOKIE_SECURE=false
+./deploy.sh local                 # build des images, puis MongoDB + API + nginx → http://localhost:8080
 ```
 
----
+## Scripts utiles
 
-## 2. Mission pour les Étudiants
+| Commande | Backend | Frontend |
+|----------|---------|----------|
+| `npm test` | 26 tests d'API (MongoDB requis) | 8 tests de composants |
+| `npm run lint` | ESLint | ESLint |
+| `npm run format` | Prettier | Prettier |
+| `npm run docs` | JSDoc → `docs/api-backend/` | JSDoc → `docs/frontend/` |
+| `npm audit` | 0 vulnérabilité | 0 vulnérabilité |
 
-Votre objectif est d'analyser, corriger et améliorer cette application pour la rendre prête pour une mise en production, en suivant les compétences de votre référentiel.
+## API
 
-### ✓ E27 – Détection des bugs et mesures correctives
+| Méthode | Route | Auth | Description |
+|---------|-------|------|-------------|
+| GET | `/api/health` | – | État de l'API et de MongoDB (200 / 503) |
+| POST | `/api/auth/register` | – | Inscription et ouverture de session (cookie HttpOnly) |
+| POST | `/api/auth/login` | – | Connexion (limitée à 10 essais / 15 min) |
+| POST | `/api/auth/logout` | – | Déconnexion |
+| GET | `/api/auth/me` | cookie | Utilisateur connecté |
+| GET | `/api/tasks` | cookie | Liste des tâches de l'utilisateur |
+| POST | `/api/tasks` | cookie | Création (`title` obligatoire, `description` facultative) |
+| PUT | `/api/tasks/:id` | cookie | Modification (`title`, `description`, `isCompleted`) |
+| DELETE | `/api/tasks/:id` | cookie | Suppression |
+| GET | `/metrics` | réseau interne | Métriques Prometheus (non exposées publiquement) |
 
-Le code contient plusieurs bugs fonctionnels et d'interface.
+## Structure
 
-**Pistes de réflexion :**
-- Testez l'application : créez un compte, connectez-vous, ajoutez, modifiez et supprimez des tâches.
-- Que se passe-t-il si vous soumettez des formulaires vides ?
-- La mise à jour de l'interface est-elle toujours immédiate après une action ?
-- Le feedback utilisateur en cas d'erreur (ex: mauvais login) est-il suffisant ?
-- Autres ....
-- **Action :** Identifiez au moins 3 bugs, décrivez-les, et proposez une correction dans le code.
-
-### ✓ E28 – Détection des failles de sécurité et mesures correctives
-
-L'application présente plusieurs vulnérabilités.
-
-**Pistes de réflexion :**
-- **Validation des entrées** : Que se passe-t-il si vous entrez du code HTML ou JavaScript (`<script>alert('test')</script>`) dans les formulaires ? (Faille XSS)
-- **Contrôle d'accès** : Un utilisateur peut-il voir ou modifier les données d'un autre utilisateur ? (Faille IDOR - Insecure Direct Object Reference). Regardez les routes `PUT` et `DELETE` dans `backend/routes/tasks.js`.
-- **Gestion des secrets** : Le secret `JWT_SECRET` dans le fichier `.env` est-il robuste ? Comment devrait-il être géré en production ?
-- **Dépendances** : Les dépendances du projet (`package.json`) sont-elles à jour ? Utilisez `npm audit` pour vérifier.
-- **Configuration** : La configuration CORS dans `backend/server.js` est-elle trop permissive pour une production ?
-- Autres ....
-- **Action :** Identifiez au moins 2 failles de sécurité, expliquez le risque associé et corrigez-les.
-
-### ✓ E29 – Génération de la documentation et journal des évolutions
-
-Le code n'est pas documenté et il n'y a pas de suivi des changements.
-
-**Pistes de réflexion :**
-- **Documentation du code source** : Comment pourriez-vous documenter les fonctions, les routes de l'API et les composants React ? Des outils comme **JSDoc** (`/** ... */`) pour le backend JavaScript et les commentaires standards pour React peuvent être utilisés.
-- **Journal des évolutions (Changelog)** : Vous allez apporter des modifications. Comment les tracer ? Créez un fichier `CHANGELOG.md` à la racine du projet et documentez-y chaque bug et faille de sécurité que vous corrigez.
-- **Action :**
-    1.  Documentez au moins une route de l'API backend et un composant React frontend en utilisant les commentaires de documentation (fournir des precisions sur ce que vous avez fait ..).
-    2.  Créez et maintenez un `CHANGELOG.md`.
-
-### ✓ E21 à E26 – Déploiement, CI/CD, Monitoring
-
-Ces points concernent l'infrastructure et l'automatisation.
-
-**Pistes de réflexion :**
-- **Conteneurisation (E24)** : Comment mettriez-vous cette application (frontend et backend) dans des conteneurs Docker ? Créez un `Dockerfile` pour le backend et un autre pour le frontend. Créez un fichier `docker-compose.yml` pour orchestrer les deux services ainsi qu'une base de données MongoDB.
-- **CI/CD (E24)** : Comment automatiser le déploiement ? Écrivez un petit script `deploy.sh` ou décrivez les étapes d'un pipeline (ex: GitHub Actions, GitLab CI) qui pourrait :
-    1.  Installer les dépendances.
-    2.  Lancer les tests (que vous pourriez écrire !).
-    3.  Construire les images Docker.
-    4.  Pousser les images vers un registre (Docker Hub, etc.).
-- **Journalisation (Logging) (E25)** : Les `console.log` actuels sont-ils suffisants ? Proposez une solution de logging plus robuste (ex: Winston, Pino) pour le backend, qui pourrait logger dans des fichiers ou envoyer les logs vers un service centralisé.
-- **Monitoring et Alertes (E26)** : Comment surveiller que votre application est en bonne santé ? Proposez des outils (ex: Prometheus, Grafana, Uptime Kuma) et définissez 2 ou 3 alertes pertinentes (ex: "API down", "Latence > 500ms", "Taux d'erreur > 5%" ...) - sinon vous pourrez utiliser et decrire le solutions proposer pour le service d'hebergement que vous avez choisi
-
-- **Hébergement, DNS, Sécurité (E21, E22, E23)** : Décrivez une architecture cible sur un fournisseur cloud (ex: AWS, Azure, GCP, Scaleway...). Où hébergeriez-vous les conteneurs ? La base de données ? Comment configureriez-vous le nom de domaine et le certificat HTTPS ?
-
----
-
-Bon courage !
+```
+backend/         API Express : config/ (env, logger, db), middleware/, models/, routes/, validators/, tests/
+frontend/        React + Vite : src/components, src/pages, src/context, nginx/ (config du conteneur)
+docker/          Script d'initialisation de MongoDB (utilisateur applicatif)
+infra/proxy/     Caddy : HTTPS et reverse-proxy des deux environnements
+infra/monitoring/ Prometheus, Alertmanager, Blackbox, Grafana (règles d'alerte, tableau de bord)
+infra/scripts/   Durcissement du serveur, sauvegardes MongoDB
+.github/workflows/ Pipeline CI/CD
+docs/            Consignes, guide de déploiement, audits npm « avant », documentation générée
+```
