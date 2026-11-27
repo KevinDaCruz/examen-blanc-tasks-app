@@ -37,6 +37,11 @@ const schema = Joi.object({
   LOG_LEVEL: Joi.string().valid('error', 'warn', 'info', 'http', 'debug').default('info'),
   /** Si défini, les logs sont aussi écrits dans des fichiers de ce dossier. */
   LOG_DIR: Joi.string().allow(''),
+  /**
+   * Jeton exigé pour lire /metrics (en-tête `Authorization: Bearer <jeton>`).
+   * Obligatoire quand l'API est exposée publiquement (PaaS) ; vide = pas de contrôle (réseau privé).
+   */
+  METRICS_TOKEN: Joi.string().min(16).allow(''),
   /** Nombre de proxys de confiance devant l'API (nginx, load balancer). */
   TRUST_PROXY: Joi.number().integer().min(0).default(1),
 }).unknown(true);
@@ -56,7 +61,7 @@ if (error) {
  *   env: string, isProd: boolean, isTest: boolean, port: number,
  *   mongoUri: string, jwtSecret: string, jwtExpiresIn: string,
  *   corsOrigins: string[], cookieSecure: boolean, logLevel: string,
- *   logDir: (string|undefined), trustProxy: number
+ *   logDir: (string|undefined), trustProxy: number, metricsToken: (string|undefined)
  * }}
  */
 const config = {
@@ -72,6 +77,7 @@ const config = {
   logLevel: value.LOG_LEVEL,
   logDir: value.LOG_DIR || undefined,
   trustProxy: value.TRUST_PROXY,
+  metricsToken: value.METRICS_TOKEN || undefined,
 };
 
 module.exports = config;

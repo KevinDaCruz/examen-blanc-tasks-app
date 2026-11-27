@@ -1,0 +1,151 @@
+# Blueprint Render : infrastructure as code des deux environnements (offre gratuite).
+#
+#   pré-production  : branche develop -> kdc-tasks-web-preprod (site statique) + kdc-tasks-api-preprod (API Docker)
+#   production      : branche main    -> kdc-tasks-web-prod    (site statique) + kdc-tasks-api-prod    (API Docker)
+#   base de données : MongoDB Atlas (une base et un utilisateur dédiés par environnement)
+#
+# Le site statique sert le build React et relaie /api/* vers l'API (même origine pour le
+# navigateur : cookie de session SameSite=Strict, pas de CORS cross-site). HTTPS et
+# certificats Let's Encrypt sont gérés automatiquement par Render.
+#
+# Les déploiements automatiques de Render sont désactivés : c'est le pipeline GitHub Actions
+# qui déclenche le déploiement d'un commit précis, après les tests (et après approbation
+# manuelle pour la production).
+
+services:
+  # ---------------------------------------------------------------- PRÉ-PRODUCTION
+  - type: web
+    name: kdc-tasks-api-preprod
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: develop
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: MONGO_URI
+        sync: false # chaîne de connexion Atlas de l'utilisateur tasks_preprod (saisie dans Render)
+      - key: JWT_SECRET
+        generateValue: true # 256 bits aléatoires générés par Render
+      - key: METRICS_TOKEN
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: https://kdc-tasks-web-preprod.onrender.com
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: LOG_LEVEL
+        value: debug
+      - key: LOG_DIR
+        value: "" # pas de disque persistant : logs JSON sur stdout, collectés par Render
+      - key: TRUST_PROXY
+        value: "3"
+
+  - type: web
+    name: kdc-tasks-web-preprod
+    runtime: static
+    branch: develop
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://kdc-tasks-api-preprod.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex, nofollow # la pré-production ne doit pas être indexée
+
+  # ---------------------------------------------------------------- PRODUCTION
+  - type: web
+    name: kdc-tasks-api-prod
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: MONGO_URI
+        sync: false # chaîne de connexion Atlas de l'utilisateur tasks_prod (saisie dans Render)
+      - key: JWT_SECRET
+        generateValue: true
+      - key: METRICS_TOKEN
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: https://kdc-tasks-web-prod.onrender.com
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: LOG_LEVEL
+        value: info
+      - key: LOG_DIR
+        value: ""
+      - key: TRUST_PROXY
+        value: "3"
+
+  - type: web
+    name: kdc-tasks-web-prod
+    runtime: static
+    branch: main
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://kdc-tasks-api-prod.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains

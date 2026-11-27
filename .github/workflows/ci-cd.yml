@@ -6,8 +6,8 @@
 #   develop   ──► 4. Déploiement PRÉ-PRODUCTION (automatique)
 #   main      ──► 5. Déploiement PRODUCTION (après approbation manuelle de l'environnement "production")
 #
-# Les déploiements ne s'exécutent que si la variable de dépôt DEPLOY_ENABLED vaut "true"
-# (une fois le serveur prêt et les secrets SSH configurés).
+# Les déploiements ne s'exécutent que si la variable de dépôt DEPLOY_ENABLED vaut "true".
+# Cible choisie par DEPLOY_TARGET : "render" (PaaS gratuit, retenu) ou "vps" (Docker Compose + SSH).
 name: CI/CD
 
 on:
@@ -147,6 +147,7 @@ jobs:
       environment: preprod
       tag: ${{ needs.images.outputs.tag }}
       url: ${{ vars.PREPROD_URL }}
+      target: ${{ vars.DEPLOY_TARGET || 'vps' }}
     secrets: inherit
     permissions:
       contents: read
@@ -161,6 +162,7 @@ jobs:
       environment: production
       tag: ${{ needs.images.outputs.tag }}
       url: ${{ vars.PROD_URL }}
+      target: ${{ vars.DEPLOY_TARGET || 'vps' }}
     secrets: inherit
     permissions:
       contents: read

@@ -11,7 +11,9 @@
  * et « taux d'erreurs 5xx > 5 % » (voir `monitoring/prometheus/alert.rules.yml`).
  * @module middleware/metrics
  */
+const crypto = require('crypto');
 const client = require('prom-client');
+const config = require('../config/env');
 
 const register = new client.Registry();
 register.setDefaultLabels({ app: 'tasks-api' });
@@ -56,6 +58,20 @@ function metricsMiddleware(req, res, next) {
 }
 
 /**
+ * Protège `/metrics` par un jeton Bearer si `METRICS_TOKEN` est défini
+ * (comparaison en temps constant pour ne pas divulguer le jeton par chronométrage).
+ * @type {express.RequestHandler}
+ */
+function metricsAuth(req, res, next) {
+  if (!config.metricsToken) return next();
+  const expected = Buffer.from(`Bearer ${config.metricsToken}`);
+  const given = Buffer.from(req.get('authorization') || '');
+  if (given.length === expected.length && crypto.timingSafeEqual(given, expected)) return next();
+  res.set('WWW-Authenticate', 'Bearer');
+  return res.status(401).json({ msg: 'Authentification requise' });
+}
+
+/**
  * Handler de `GET /metrics` au format texte Prometheus.
  * @type {express.RequestHandler}
  */
@@ -64,4 +80,4 @@ async function metricsHandler(req, res) {
   res.end(await register.metrics());
 }
 
-module.exports = { metricsMiddleware, metricsHandler, register, authLoginFailures };
+module.exports = { metricsMiddleware, metricsAuth, metricsHandler, register, authLoginFailures };

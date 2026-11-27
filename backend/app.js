@@ -9,7 +9,7 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const config = require('./config/env');
 const logger = require('./config/logger');
-const { metricsMiddleware, metricsHandler } = require('./middleware/metrics');
+const { metricsMiddleware, metricsAuth, metricsHandler } = require('./middleware/metrics');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -50,8 +50,8 @@ app.use('/api/health', require('./routes/health'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tasks', require('./routes/tasks'));
 
-// Métriques Prometheus : NON exposées publiquement (nginx ne proxifie que /api).
-app.get('/metrics', metricsHandler);
+// Métriques Prometheus : non relayées par nginx (VPS) et protégées par jeton si METRICS_TOKEN est défini (PaaS).
+app.get('/metrics', metricsAuth, metricsHandler);
 
 app.use(notFound);
 app.use(errorHandler);
