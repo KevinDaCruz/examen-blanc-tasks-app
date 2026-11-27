@@ -1,0 +1,13 @@
+{
+  "source": {
+    "include": ["server.js", "app.js", "config", "middleware", "models", "routes", "validators"],
+    "includePattern": "\\.js$"
+  },
+  "opts": {
+    "destination": "../docs/api-backend",
+    "recurse": true,
+    "readme": "../README.md"
+  },
+  "tags": { "allowUnknownTags": true },
+  "templates": { "cleverLinks": true }
+}
