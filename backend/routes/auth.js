@@ -32,10 +32,31 @@ const authLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  skip: () => config.isTest,
+  skip: () => config.isTest && !process.env.RATE_LIMIT_IN_TEST,
   message: { msg: 'Trop de tentatives, réessayez dans quelques minutes' },
   handler: (req, res, _next, options) => {
     logger.audit('auth.rate_limited', { ip: req.ip, path: req.originalUrl });
+    res.status(options.statusCode).json(options.message);
+  },
+});
+
+/**
+ * Anti brute-force par COMPTE : 10 échecs de connexion / 15 min / nom d'utilisateur,
+ * quelle que soit l'IP. Complète la limite par IP, contournable par un attaquant qui
+ * falsifie X-Forwarded-For en appelant l'API directement (hors du proxy du site).
+ * Seuls les échecs sont comptés (`skipSuccessfulRequests`).
+ */
+const accountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  skip: () => config.isTest && !process.env.RATE_LIMIT_IN_TEST,
+  keyGenerator: (req) => `account:${String(req.body?.username || '').toLowerCase()}`,
+  message: { msg: 'Trop de tentatives sur ce compte, réessayez dans quelques minutes' },
+  handler: (req, res, _next, options) => {
+    logger.audit('auth.account_rate_limited', { username: req.body?.username, ip: req.ip });
     res.status(options.statusCode).json(options.message);
   },
 });
@@ -104,9 +125,9 @@ router.post('/register', authLimiter, validate(schemas.register), async (req, re
  * @returns {200} `{ user: { _id, username } }` + cookie de session HttpOnly.
  * @returns {400} Champ manquant.
  * @returns {401} Identifiants incorrects.
- * @returns {429} Trop de tentatives.
+ * @returns {429} Trop de tentatives (par IP ou par compte).
  */
-router.post('/login', authLimiter, validate(schemas.login), async (req, res) => {
+router.post('/login', authLimiter, validate(schemas.login), accountLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   const user = await User.findOne({ username }).select('+password');

@@ -40,7 +40,7 @@ services:
       - key: LOG_DIR
         value: "" # pas de disque persistant : logs JSON sur stdout, collectés par Render
       - key: TRUST_PROXY
-        value: "3"
+        value: "6" # chaîne mesurée : visiteur -> site statique (rewrite) -> edge Render -> API
 
   - type: web
     name: kdc-tasks-web-preprod
@@ -110,7 +110,7 @@ services:
       - key: LOG_DIR
         value: ""
       - key: TRUST_PROXY
-        value: "3"
+        value: "6" # chaîne mesurée : visiteur -> site statique (rewrite) -> edge Render -> API
 
   - type: web
     name: kdc-tasks-web-prod
