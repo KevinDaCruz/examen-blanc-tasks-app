@@ -1,0 +1,9 @@
+{
+  "source": {
+    "include": ["src"],
+    "includePattern": "\\.(js|jsx)$",
+    "excludePattern": "(test|setup)"
+  },
+  "opts": { "destination": "../docs/frontend", "recurse": true },
+  "tags": { "allowUnknownTags": true }
+}
