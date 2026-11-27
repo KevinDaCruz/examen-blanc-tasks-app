@@ -59,6 +59,7 @@ conteneurisation, CI/CD, journalisation et supervision (E21 à E26).
 - **Conteneurisation (E24)** : Dockerfiles (image backend non-root avec healthcheck ; frontend multi-stage servi par nginx non-root), `docker-compose.yml` (MongoDB authentifié, réseau interne, volumes, rotation des logs), `deploy.sh` (healthchecks, test de fumée, rollback automatique).
 - **CI/CD (E24)** : GitHub Actions (lint, tests, audit, build et push des images sur GHCR, scan Trivy, déploiement automatique en pré-production sur `develop` et en production sur `main` avec approbation manuelle).
 - **Hébergement gratuit Render + MongoDB Atlas** : Blueprint `render.yaml` (infrastructure as code des 2 environnements), déploiement par l'API Render depuis GitHub Actions (commit testé, approbation pour la prod), `/metrics` protégé par jeton (`METRICS_TOKEN`).
+- **Supervision Grafana Cloud** (`infra/grafana-cloud/provision.py`, idempotent) : collecte de `/metrics`, sondes HTTPS externes (Synthetic Monitoring), tableau de bord et 7 alertes notifiées via ntfy.
 - **Base de données au choix** : MongoDB Atlas (service managé, `MONGO_URI`) ou conteneur MongoDB (profil Compose `local-db`), selon l'environnement.
 - **Hébergement (E21 à E23)** : reverse-proxy Caddy (HTTPS Let's Encrypt automatique, HSTS, pré-production protégée par mot de passe et non indexée), script de durcissement du VPS, sauvegardes MongoDB.
 

@@ -2,6 +2,8 @@
 
 [![CI/CD](https://github.com/KevinDaCruz/examen-blanc-tasks-app/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/KevinDaCruz/examen-blanc-tasks-app/actions/workflows/ci-cd.yml)
 
+**En ligne** : production https://kevin-tasks.duckdns.org · pré-production https://preprod.kevin-tasks.duckdns.org (Render + MongoDB Atlas + Grafana Cloud).
+
 Application « To-Do List » : frontend **React 19 (Vite)**, API **Node.js / Express 5**, base **MongoDB**.
 Ce dépôt contient la version **2.0.0**, corrigée et prête pour la production. La version initiale comportait volontairement des bugs et des failles de sécurité.
 

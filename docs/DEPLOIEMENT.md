@@ -2,13 +2,33 @@
 
 Ce guide couvre les compétences E21 à E26. Les corrections de code (E27 à E29) sont décrites dans le [CHANGELOG](../CHANGELOG.md).
 
+## 0. Solution déployée (résumé)
+
+| | Pré-production | Production |
+|---|---|---|
+| URL | https://preprod.kevin-tasks.duckdns.org | https://kevin-tasks.duckdns.org |
+| Branche Git / déploiement | `develop` : automatique après la CI | `main` : après la CI **et** approbation manuelle |
+| Frontend (Render, site statique) | `kdc-tasks-web-preprod` | `kdc-tasks-web-prod` |
+| API (Render, Docker, Frankfurt) | `kdc-tasks-api-preprod` | `kdc-tasks-api-prod` |
+| Base (MongoDB Atlas M0, AWS Frankfurt) | base `tasks_preprod`, utilisateur `tasks_preprod` | base `tasks_prod`, utilisateur `tasks_prod` |
+| Supervision (Grafana Cloud) | job `tasks-api-preprod` + sonde `site-preprod` | job `tasks-api-prod` + sonde `site-prod` |
+
+Coût total : **0 €**. Toute la configuration est versionnée :
+- `render.yaml` : Blueprint Render ;
+- `.github/workflows/` : pipeline CI/CD ;
+- `infra/grafana-cloud/provision.py` : alertes, tableau de bord et notifications.
+
+La variante **VPS + Docker Compose** (sections 2 à 8) reste prête à l'emploi : même code, même images.
+
 ---
 
 ## 1. Choix de l'hébergement (E21)
 
-L'application est composée de trois services légers (nginx, Node.js, MongoDB), conteneurisés, et doit fonctionner dans **deux environnements** (pré-production et production). Elle sera déployée sur un **VPS Linux avec Docker Compose**.
+L'application est composée de trois services légers (frontend statique, API Node.js, MongoDB), conteneurisés, et doit fonctionner dans **deux environnements** (pré-production et production). La contrainte du projet est un **budget nul**.
 
-| Critère | VPS + Docker (retenu) | PaaS (Render, Railway) + MongoDB Atlas | Kubernetes managé (GKE, AKS, Kapsule) |
+**Choix retenu : PaaS Render, MongoDB Atlas et Grafana Cloud** (offres gratuites, sans carte bancaire). C'est aussi la solution suggérée par les consignes : « Render… avec MongoDB Atlas et HTTPS ».
+
+| Critère | VPS + Docker (variante prête) | PaaS Render + MongoDB Atlas (**retenu**) | Kubernetes managé (GKE, AKS, Kapsule) |
 |---------|-----------------------|----------------------------------------|----------------------------------------|
 | Coût | 4 à 6 €/mois pour les 2 environnements | Gratuit mais limité (mise en veille), puis environ 7 $/service/mois | Plus de 50 €/mois |
 | Performance | Ressources dédiées, pas de démarrage à froid | Démarrage à froid de 30 à 60 s en offre gratuite | Très bonne, mais surdimensionnée ici |
@@ -20,7 +40,12 @@ L'application est composée de trois services légers (nginx, Node.js, MongoDB),
 
 **Fournisseurs envisagés** (Ubuntu 24.04, 2 vCPU, 2 à 4 Go de RAM, environ 40 Go de disque) : Hetzner Cloud CX22 (UE), Scaleway (France), OVHcloud VPS (France), ou DigitalOcean (crédit offert par le GitHub Student Pack).
 
-**Recommandation, alignée sur les consignes** (AWS, GCP, Render ou Scaleway, avec MongoDB Atlas et Let's Encrypt) :
+**Pourquoi Render l'emporte ici** : avec un budget nul, Render fournit gratuitement l'hébergement Docker, les sites statiques sur CDN, le HTTPS automatique avec renouvellement, les domaines personnalisés, les logs, les déploiements par API et le Blueprint (infrastructure as code). On accepte en contrepartie :
+- **la mise en veille** de l'API après 15 minutes sans trafic, avec environ 1 minute de réveil. Les sondes de supervision la maintiennent éveillée pendant la période d'évaluation ;
+- **le quota de 750 h/mois** d'instance gratuite, partagé entre les services du compte ;
+- **l'absence d'IP de sortie fixe**, qui oblige à ouvrir Atlas à `0.0.0.0/0`. C'est compensé par des mots de passe forts, TLS obligatoire, et un utilisateur par environnement limité à sa base.
+
+**Recommandation pour une variante VPS, alignée sur les consignes** (AWS, GCP, Render ou Scaleway, avec MongoDB Atlas et Let's Encrypt) :
 
 - **Scaleway** : instance DEV1-S ou PLAY2 à Paris (PAR1). Fournisseur français, données hébergées en France (RGPD), facturation à l'heure, console simple, IPv4 publique incluse.
 - **MongoDB Atlas** pour la base, avec deux bases séparées (pré-production et production) sur un cluster M0 gratuit, hébergé chez AWS à Paris (`eu-west-3`). C'est un service managé : haute disponibilité (replica set de 3 nœuds), chiffrement au repos et en transit (TLS), liste blanche d'IP (seule l'IP du VPS est autorisée), et utilisateurs à droits limités (`readWrite` sur une seule base).
@@ -44,7 +69,51 @@ Le `docker-compose.yml` accepte les **deux modes de base de données**. Avec `MO
 
 ---
 
-## 2. Architecture cible
+## 1 bis. Architecture déployée (Render + Atlas)
+
+```
+ DuckDNS (DNS)  kevin-tasks.duckdns.org (A 216.24.57.1)  ·  preprod.kevin-tasks.duckdns.org
+                         │ HTTPS (certificats automatiques, renouvelés par Render)
+        ┌────────────────▼───────────────┐        ┌────────────────────────────────┐
+        │ Site statique React (CDN)      │ /api/* │ API Express (Docker, Frankfurt)│
+        │ CSP, HSTS, X-Frame-Options     ├───────►│ /api/health · /metrics (jeton) │
+        │ rewrite /api/* -> API (proxy)  │        └───────────────┬────────────────┘
+        └────────────────────────────────┘                        │ TLS, utilisateur dédié
+                                                   ┌──────────────▼─────────────────┐
+  Grafana Cloud : scrape /metrics (1 min)          │ MongoDB Atlas M0 (AWS Frankfurt)│
+  + sondes HTTPS (2 sondes UE, 5 min)               │ tasks_preprod  |  tasks_prod    │
+  -> 7 alertes -> ntfy (push mobile)                └────────────────────────────────┘
+```
+
+- **Même origine** : le site relaie `/api/*` vers l'API. Le navigateur ne parle qu'à `kevin-tasks.duckdns.org`, et le cookie de session reste `HttpOnly; Secure; SameSite=Strict`.
+- **IP réelle du client** : la chaîne de proxys a été mesurée (site → edge Render → API = 6 sauts), d'où `TRUST_PROXY=6`. Une limite par compte complète la limite par IP, car un appel direct à l'API avec un `X-Forwarded-For` falsifié pourrait sinon contourner cette dernière.
+- **Certificats** : émis par Render (autorité *Google Trust Services* pour ces domaines ; Render utilise aussi Let's Encrypt) et renouvelés automatiquement. Ils ont été vérifiés avec `openssl s_client` : sujet = domaine, validité de 90 jours.
+- **Secrets** : `JWT_SECRET` et `METRICS_TOKEN` sont générés par Render (256 bits), `MONGO_URI` est saisi dans Render, `RENDER_API_KEY` est dans les secrets GitHub. Aucun secret n'est dans Git (vérifié avec gitleaks sur tout l'historique).
+
+**Journalisation (E25) sur Render** : les logs JSON de Winston (accès HTTP, erreurs, événements `AUDIT`) sont collectés par Render. On les consulte dans *Dashboard → service → Logs* (filtre `AUDIT`, `auth.login_failed`…) ou par l'API `GET /v1/logs`. Les déploiements sont tracés dans l'onglet *Events* de Render et dans l'historique GitHub Actions. Atlas fournit en plus ses propres métriques et l'historique des connexions.
+
+**Supervision (E26) sur Grafana Cloud** :
+- un *Metrics Endpoint* collecte `/metrics` sur les deux API (Bearer `METRICS_TOKEN`) ;
+- *Synthetic Monitoring* sonde `https://…/api/health` depuis 2 sondes européennes toutes les 5 minutes : statut 200, corps `"status":"ok"`, TLS obligatoire et date d'expiration du certificat ;
+- le tableau de bord « Application Mes Tâches » et 7 alertes sont créés par `infra/grafana-cloud/provision.py` :
+
+| Alerte | Condition | Gravité |
+|---|---|---|
+| SiteInaccessible | moins de 50 % des sondes HTTPS OK pendant 3 min | critique |
+| ApiDown | collecte `/metrics` en échec pendant 5 min | critique |
+| TauxErreurs5xx | plus de 5 % de réponses 5xx sur 5 min | critique |
+| LatenceElevee | latence p95 > 500 ms sur 5 min | avertissement |
+| MemoireApiElevee | plus de 400 Mo de RSS (instance de 512 Mo) | avertissement |
+| BruteForceSuspecte | plus de 20 échecs de connexion en 5 min | avertissement |
+| CertificatExpireBientot | certificat expirant dans moins de 14 jours | avertissement |
+
+Les notifications sont envoyées en push via **ntfy**, faute de SMTP fourni. Les alertes critiques de production sont répétées toutes les 30 minutes. La chaîne Grafana → ntfy a été testée de bout en bout.
+
+**Après l'examen** : désactiver les sondes et les jobs de collecte (sinon l'API ne se met jamais en veille et consomme le quota de 750 h), et révoquer les jetons d'API Render et Grafana.
+
+---
+
+## 2. Architecture cible (variante VPS)
 
 ```
                     DNS : app / preprod / monitoring.<domaine>  ─►  IP du VPS
@@ -69,7 +138,7 @@ Le `docker-compose.yml` accepte les **deux modes de base de données**. Avec `MO
 
 ---
 
-## 3. Préparation et sécurisation du serveur (E22)
+## 3. Préparation et sécurisation du serveur (E22) - variante VPS
 
 ```bash
 # Depuis votre poste : copier le script, puis l'exécuter en root sur le VPS
@@ -105,7 +174,7 @@ chmod 600 .env.preprod .env.prod
 
 ---
 
-## 4. Nom de domaine, DNS et certificats HTTPS (E23)
+## 4. Nom de domaine, DNS et certificats HTTPS (E23) - variante VPS
 
 ### 4.1 Réservation d'un sous-domaine gratuit (DuckDNS)
 
@@ -193,7 +262,7 @@ Dans *Settings → Environments → production*, activer **Required reviewers** 
 
 ---
 
-## 6. Journalisation et audit (E25)
+## 6. Journalisation et audit (E25) - variante VPS
 
 | Source | Contenu | Où le consulter |
 |--------|---------|-----------------|
@@ -217,7 +286,7 @@ docker exec tasks-prod-backend-1 sh -c 'grep login_failed /app/logs/audit.log | 
 
 ---
 
-## 7. Supervision et alertes (E26)
+## 7. Supervision et alertes (E26) - variante VPS
 
 ```bash
 cd /opt/tasks-app/infra/monitoring
@@ -270,7 +339,7 @@ Alternative plus simple : **Uptime Kuma** (sondes HTTP avec page de statut).
 
 ---
 
-## 8. Sauvegardes et maintenance
+## 8. Sauvegardes et maintenance - variante VPS
 
 ```bash
 # crontab -e (utilisateur deploy) : sauvegarde quotidienne à 3 h, 7 jours conservés
@@ -285,13 +354,16 @@ Alternative plus simple : **Uptime Kuma** (sondes HTTP avec page de statut).
 
 ## 9. Accès à transmettre pour la vérification
 
-Ne jamais les committer : les transmettre à l'évaluateur par un canal privé.
+Ne jamais committer les secrets : les transmettre à l'évaluateur par un canal privé (ils sont rangés hors du dépôt).
 
 | Élément | Valeur |
 |---------|--------|
-| Production | https://app.______.duckdns.org |
-| Pré-production | https://preprod.______.duckdns.org (utilisateur / mot de passe basic auth) |
-| Grafana | https://monitoring.______.duckdns.org (compte lecteur) |
-| Dépôt GitHub | https://github.com/______/______ |
-| Serveur | `ssh deploy@<IP>` (clé publique de l'évaluateur à ajouter) |
-| Compte de test de l'application | utilisateur / mot de passe |
+| Production | https://kevin-tasks.duckdns.org |
+| Pré-production | https://preprod.kevin-tasks.duckdns.org |
+| Dépôt GitHub (public) | https://github.com/KevinDaCruz/examen-blanc-tasks-app |
+| Pipeline CI/CD | https://github.com/KevinDaCruz/examen-blanc-tasks-app/actions |
+| Render | invitation de l'évaluateur dans le workspace (Settings → Members) |
+| MongoDB Atlas | projet `examen-blanc` : invitation de l'évaluateur (Project Access Manager, rôle Read Only) |
+| Grafana Cloud | https://dappercab646.grafana.net : invitation de l'évaluateur (rôle Viewer) |
+| Alertes ntfy | topic transmis en privé |
+| Compte de test de l'application | à créer sur le site (inscription libre) |
