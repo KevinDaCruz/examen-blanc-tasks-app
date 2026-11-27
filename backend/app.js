@@ -43,6 +43,14 @@ if (!config.isTest) {
   app.use(morgan(config.isProd ? 'combined' : 'dev', { stream: logger.stream }));
 }
 
+// Diagnostic (niveau debug uniquement, donc pré-production) : chaîne de proxys, pour régler TRUST_PROXY.
+if (config.logLevel === 'debug') {
+  app.use((req, _res, next) => {
+    logger.debug('proxy-chain', { xff: req.get('x-forwarded-for'), ip: req.ip, path: req.path });
+    next();
+  });
+}
+
 app.use(metricsMiddleware);
 
 // Routes
