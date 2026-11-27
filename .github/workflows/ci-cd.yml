@@ -2,7 +2,7 @@
 #
 #   push / PR ──► 1. Backend : install, lint, format, tests (MongoDB), audit
 #             └─► 2. Frontend : install, lint, format, tests, build, audit
-#   push      ──► 3. Images Docker : build + push sur GHCR (tag sha-xxxxxxx) + scan Trivy
+#   push/manuel ► 3. Images Docker : build + push sur GHCR (tag sha-xxxxxxx) + scan Trivy
 #   develop   ──► 4. Déploiement PRÉ-PRODUCTION (automatique)
 #   main      ──► 5. Déploiement PRODUCTION (après approbation manuelle de l'environnement "production")
 #
@@ -78,7 +78,7 @@ jobs:
   images:
     name: Images Docker (build, push, scan)
     needs: [backend, frontend]
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
