@@ -28,6 +28,8 @@ services:
     # Démarré uniquement si MONGO_URI est vide (profil activé par deploy.sh, qui vérifie aussi ces variables).
     profiles: [local-db]
     restart: unless-stopped
+    # Cache WiredTiger limité : plusieurs bases (preprod + prod) cohabitent sur un petit VPS.
+    command: ["--wiredTigerCacheSizeGB", "${MONGO_CACHE_GB:-0.25}"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-}
