@@ -32,7 +32,7 @@ services:
       - key: METRICS_TOKEN
         generateValue: true
       - key: CORS_ORIGIN
-        value: https://kdc-tasks-web-preprod.onrender.com
+        value: https://preprod.kevin-tasks.duckdns.org,https://kdc-tasks-web-preprod.onrender.com
       - key: COOKIE_SECURE
         value: "true"
       - key: LOG_LEVEL
@@ -102,7 +102,7 @@ services:
       - key: METRICS_TOKEN
         generateValue: true
       - key: CORS_ORIGIN
-        value: https://kdc-tasks-web-prod.onrender.com
+        value: https://kevin-tasks.duckdns.org,https://kdc-tasks-web-prod.onrender.com
       - key: COOKIE_SECURE
         value: "true"
       - key: LOG_LEVEL

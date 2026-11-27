@@ -200,14 +200,22 @@ def upsert_rules():
         print(f"règle {r['title']:<24}", code, "" if code < 300 else str(res)[:200])
 
 
-def panel(pid, title, expr, unit, x, y, w=12, h=8, kind="timeseries", legend="{{env}}"):
+def panel(pid, title, expr, unit, x, y, w=12, h=8, kind="timeseries", legend="{{env}}", steps=None):
+    """Un panneau ; `steps` = seuils de couleur [(valeur, couleur), ...] (défaut : neutre)."""
+    steps = steps or [(None, "green")]
     return {
         "id": pid,
         "type": kind,
         "title": title,
         "datasource": {"type": "prometheus", "uid": PROM_UID},
         "gridPos": {"x": x, "y": y, "w": w, "h": h},
-        "fieldConfig": {"defaults": {"unit": unit}, "overrides": []},
+        "fieldConfig": {
+            "defaults": {
+                "unit": unit,
+                "thresholds": {"mode": "absolute", "steps": [{"value": v, "color": c} for v, c in steps]},
+            },
+            "overrides": [],
+        },
         "targets": [{"refId": "A", "expr": expr, "legendFormat": legend}],
     }
 
@@ -215,17 +223,19 @@ def panel(pid, title, expr, unit, x, y, w=12, h=8, kind="timeseries", legend="{{
 def upsert_dashboard():
     api = ".*tasks-api-(prod|preprod).*"
     panels = [
-        panel(1, "Disponibilité (sondes HTTPS)", env_label(f"avg by (job) (probe_success{{{SITE_JOBS}}})", "site-(.*)"), "percentunit", 0, 0, 6, 5, "stat"),
-        panel(2, "API joignable", env_label(f"max by (job) (up{{{API_JOBS}}})", api), "bool_yes_no", 6, 0, 6, 5, "stat"),
-        panel(3, "Expiration certificat TLS (jours)", env_label(f"min by (job) ((probe_ssl_earliest_cert_expiry{{{SITE_JOBS}}} - time()) / 86400)", "site-(.*)"), "d", 12, 0, 6, 5, "stat"),
-        panel(4, "Échecs de connexion (1 h)", env_label(f"sum by (job) (increase(auth_login_failures_total{{{API_JOBS}}}[1h]))", api), "short", 18, 0, 6, 5, "stat"),
+        panel(1, "Disponibilité (sondes HTTPS)", env_label(f"avg by (job) (probe_success{{{SITE_JOBS}}})", "site-(.*)"), "percentunit", 0, 0, 6, 5, "stat", steps=[(None, "red"), (0.5, "orange"), (0.99, "green")]),
+        panel(2, "API joignable", env_label(f"max by (job) (up{{{API_JOBS}}})", api), "bool_yes_no", 6, 0, 6, 5, "stat", steps=[(None, "red"), (1, "green")]),
+        panel(3, "Expiration certificat TLS (jours)", env_label(f"min by (job) ((probe_ssl_earliest_cert_expiry{{{SITE_JOBS}}} - time()) / 86400)", "site-(.*)"), "d", 12, 0, 6, 5, "stat", steps=[(None, "red"), (14, "orange"), (30, "green")]),
+        panel(4, "Échecs de connexion (1 h)", env_label(f"sum by (job) (increase(auth_login_failures_total{{{API_JOBS}}}[1h]))", api), "short", 18, 0, 6, 5, "stat", steps=[(None, "green"), (20, "orange"), (100, "red")]),
         panel(5, "Requêtes / seconde", env_label(f'sum by (job) (rate(http_requests_total{{{API_JOBS}, route!="/metrics"}}[5m]))', api), "reqps", 0, 5),
         panel(6, "Latence p95", env_label(f'histogram_quantile(0.95, sum by (le, job) (rate(http_request_duration_seconds_bucket{{{API_JOBS}, route!="/metrics"}}[5m])))', api), "s", 12, 5),
-        panel(7, "Taux d'erreurs 5xx", env_label(f'sum by (job) (rate(http_requests_total{{{API_JOBS}, status_code=~"5.."}}[5m])) / sum by (job) (rate(http_requests_total{{{API_JOBS}}}[5m]))', api), "percentunit", 0, 13),
+        panel(7, "Taux d'erreurs 5xx", env_label(f'(sum by (job) (rate(http_requests_total{{{API_JOBS}, status_code=~"5.."}}[5m])) or 0 * sum by (job) (rate(http_requests_total{{{API_JOBS}}}[5m]))) / sum by (job) (rate(http_requests_total{{{API_JOBS}}}[5m]))', api), "percentunit", 0, 13),
         panel(8, "Requêtes par route et statut", env_label(f'sum by (job, route, status_code) (rate(http_requests_total{{{API_JOBS}, route!="/metrics"}}[5m]))', api), "reqps", 12, 13, legend="{{env}} {{route}} {{status_code}}"),
         panel(9, "Mémoire de l'API", env_label(f"process_resident_memory_bytes{{{API_JOBS}}}", api), "bytes", 0, 21),
         panel(10, "Temps de réponse des sondes HTTPS", env_label(f"avg by (job) (probe_duration_seconds{{{SITE_JOBS}}})", "site-(.*)"), "s", 12, 21),
     ]
+    # Taux d'erreurs : échelle fixe de 0 à 100 % (sinon l'axe auto devient illisible quand tout vaut 0).
+    panels[6]["fieldConfig"]["defaults"].update({"min": 0, "max": 1})
     dash = {
         "dashboard": {
             "uid": "tasks-app",
