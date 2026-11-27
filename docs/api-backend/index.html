@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Home</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Home</h1>
+
+    
+
+
+
+    
+
+
+    <h3> </h3>
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+    <section>
+        <article><h1>Mes Tâches : application de gestion de tâches</h1>
+<p>Application « To-Do List » : frontend <strong>React 19 (Vite)</strong>, API <strong>Node.js / Express 5</strong>, base <strong>MongoDB</strong>.
+Ce dépôt contient la version <strong>2.0.0</strong>, corrigée et prête pour la production. La version initiale comportait volontairement des bugs et des failles de sécurité.</p>
+<ul>
+<li>Énoncé de l'exercice : <a href="docs/CONSIGNES.md">docs/CONSIGNES.md</a></li>
+<li>Corrections apportées (bugs, failles) : <a href="CHANGELOG.md">CHANGELOG.md</a></li>
+<li>Architecture, hébergement, CI/CD, logs, supervision : <a href="docs/DEPLOIEMENT.md">docs/DEPLOIEMENT.md</a></li>
+<li>Documentation générée depuis le code : <a href="docs/api-backend/index.html">docs/api-backend/index.html</a> et <a href="docs/frontend/index.html">docs/frontend/index.html</a></li>
+</ul>
+<h2>Architecture</h2>
+<pre class="prettyprint source"><code>Navigateur ──HTTPS──► Caddy (TLS Let's Encrypt)
+                        ├── app.&lt;domaine>      ──► frontend-prod    (nginx : fichiers React + proxy /api) ──► backend-prod    ──► mongo-prod
+                        ├── preprod.&lt;domaine>  ──► frontend-preprod (idem, protégé par mot de passe)      ──► backend-preprod ──► mongo-preprod
+                        └── monitoring.&lt;domaine> ► Grafana ◄── Prometheus ◄── /metrics, Blackbox, node-exporter ──► Alertmanager (e-mail)
+</code></pre>
+<h2>Démarrage en développement</h2>
+<p>Prérequis : Node.js 22 ou plus récent, et MongoDB en local (ou <code>docker run -d -p 27017:27017 mongo:8</code>).</p>
+<pre class="prettyprint source lang-bash"><code># Backend
+cd backend
+cp .env.example .env              # puis renseigner JWT_SECRET : openssl rand -hex 32
+npm install
+npm run dev                       # http://localhost:5000  (rechargement automatique + logs debug)
+
+# Frontend (autre terminal)
+cd frontend
+npm install
+npm run dev                       # http://localhost:3000  (/api est proxifié vers :5000)
+</code></pre>
+<h2>Démarrage avec Docker (comme en production)</h2>
+<pre class="prettyprint source lang-bash"><code>cp .env.example .env.local        # remplir les secrets ; ENV_NAME=local, PUBLIC_URL=http://localhost:8080, COOKIE_SECURE=false
+./deploy.sh local                 # build des images, puis MongoDB + API + nginx → http://localhost:8080
+</code></pre>
+<h2>Scripts utiles</h2>
+<table>
+<thead>
+<tr>
+<th>Commande</th>
+<th>Backend</th>
+<th>Frontend</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>npm test</code></td>
+<td>26 tests d'API (MongoDB requis)</td>
+<td>8 tests de composants</td>
+</tr>
+<tr>
+<td><code>npm run lint</code></td>
+<td>ESLint</td>
+<td>ESLint</td>
+</tr>
+<tr>
+<td><code>npm run format</code></td>
+<td>Prettier</td>
+<td>Prettier</td>
+</tr>
+<tr>
+<td><code>npm run docs</code></td>
+<td>JSDoc → <code>docs/api-backend/</code></td>
+<td>JSDoc → <code>docs/frontend/</code></td>
+</tr>
+<tr>
+<td><code>npm audit</code></td>
+<td>0 vulnérabilité</td>
+<td>0 vulnérabilité</td>
+</tr>
+</tbody>
+</table>
+<h2>API</h2>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Route</th>
+<th>Auth</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/health</code></td>
+<td>–</td>
+<td>État de l'API et de MongoDB (200 / 503)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/register</code></td>
+<td>–</td>
+<td>Inscription et ouverture de session (cookie HttpOnly)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/login</code></td>
+<td>–</td>
+<td>Connexion (limitée à 10 essais / 15 min)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/logout</code></td>
+<td>–</td>
+<td>Déconnexion</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/auth/me</code></td>
+<td>cookie</td>
+<td>Utilisateur connecté</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/tasks</code></td>
+<td>cookie</td>
+<td>Liste des tâches de l'utilisateur</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/tasks</code></td>
+<td>cookie</td>
+<td>Création (<code>title</code> obligatoire, <code>description</code> facultative)</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/api/tasks/:id</code></td>
+<td>cookie</td>
+<td>Modification (<code>title</code>, <code>description</code>, <code>isCompleted</code>)</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/tasks/:id</code></td>
+<td>cookie</td>
+<td>Suppression</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/metrics</code></td>
+<td>réseau interne</td>
+<td>Métriques Prometheus (non exposées publiquement)</td>
+</tr>
+</tbody>
+</table>
+<h2>Structure</h2>
+<pre class="prettyprint source"><code>backend/         API Express : config/ (env, logger, db), middleware/, models/, routes/, validators/, tests/
+frontend/        React + Vite : src/components, src/pages, src/context, nginx/ (config du conteneur)
+docker/          Script d'initialisation de MongoDB (utilisateur applicatif)
+infra/proxy/     Caddy : HTTPS et reverse-proxy des deux environnements
+infra/monitoring/ Prometheus, Alertmanager, Blackbox, Grafana (règles d'alerte, tableau de bord)
+infra/scripts/   Durcissement du serveur, sauvegardes MongoDB
+.github/workflows/ Pipeline CI/CD
+docs/            Consignes, guide de déploiement, audits npm « avant », documentation générée
+</code></pre></article>
+    </section>
+
+
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-app.html">app</a></li><li><a href="module-config_db.html">config/db</a></li><li><a href="module-config_env.html">config/env</a></li><li><a href="module-config_logger.html">config/logger</a></li><li><a href="module-middleware_auth.html">middleware/auth</a></li><li><a href="module-middleware_errorHandler.html">middleware/errorHandler</a></li><li><a href="module-middleware_metrics.html">middleware/metrics</a></li><li><a href="module-middleware_validate.html">middleware/validate</a></li><li><a href="module-models_Task.html">models/Task</a></li><li><a href="module-models_User.html">models/User</a></li><li><a href="module-routes_auth.html">routes/auth</a></li><li><a href="module-routes_health.html">routes/health</a></li><li><a href="module-routes_tasks.html">routes/tasks</a></li><li><a href="module-server.html">server</a></li><li><a href="module-validators_schemas.html">validators/schemas</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Nov 27 2026 10:25:13 GMT+0100 (Central European Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
