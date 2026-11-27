@@ -1,0 +1,95 @@
+# Orchestration de l'application : MongoDB + API Node.js + frontend React (nginx).
+#
+# Le même fichier sert pour la pré-production et la production ; seules les
+# variables changent (fichier .env.preprod / .env.prod, jamais versionné) :
+#   docker compose -p tasks-preprod --env-file .env.preprod up -d
+#   docker compose -p tasks-prod    --env-file .env.prod    up -d
+# (le plus simple : ./deploy.sh <local|preprod|prod> [tag])
+#
+# Ce fichier ne référence que des IMAGES (construites et poussées par la CI).
+# Pour construire en local, ajouter la surcouche docker-compose.build.yml.
+#
+# Sécurité : MongoDB et l'API ne publient AUCUN port sur l'hôte ; seul le frontend
+# (nginx) est exposé, et uniquement sur 127.0.0.1 derrière le reverse-proxy HTTPS.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?MONGO_ROOT_USER manquant}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD manquant}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-exam_practice_db}
+      MONGO_APP_USER: ${MONGO_APP_USER:?MONGO_APP_USER manquant}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?MONGO_APP_PASSWORD manquant}
+    volumes:
+      - mongo-data:/data/db
+      - ./docker/mongo/init-app-user.js:/docker-entrypoint-initdb.d/init-app-user.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+    logging: *default-logging
+
+  backend:
+    image: ${REGISTRY:-ghcr.io/local}/tasks-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGO_URI: mongodb://${MONGO_APP_USER}:${MONGO_APP_PASSWORD}@mongo:27017/${MONGO_DB:-exam_practice_db}?authSource=${MONGO_DB:-exam_practice_db}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      CORS_ORIGIN: ${PUBLIC_URL:?PUBLIC_URL manquant}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_DIR: /app/logs
+      TRUST_PROXY: ${TRUST_PROXY:-2}
+    volumes:
+      - backend-logs:/app/logs
+    networks:
+      internal:
+      public:
+        # Alias unique par environnement, utilisé par Prometheus pour le scraping de /metrics.
+        aliases: ["backend-${ENV_NAME:-local}"]
+    logging: *default-logging
+
+  frontend:
+    image: ${REGISTRY:-ghcr.io/local}/tasks-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_UPSTREAM: backend:5000
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:8080"
+    networks:
+      public:
+        # Alias unique par environnement, utilisé par le reverse-proxy Caddy.
+        aliases: ["frontend-${ENV_NAME:-local}"]
+    logging: *default-logging
+
+volumes:
+  mongo-data:
+  backend-logs:
+
+networks:
+  # Réseau privé : MongoDB n'est joignable que par l'API.
+  internal:
+    internal: true
+  # Réseau partagé avec le reverse-proxy et la supervision (créé par deploy.sh).
+  public:
+    name: tasks-${ENV_NAME:-local}-net
+    external: true

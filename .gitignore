@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+logs/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+backups/
+.deployed-*
+deployments.log
+infra/monitoring/prometheus/targets/*.yml
