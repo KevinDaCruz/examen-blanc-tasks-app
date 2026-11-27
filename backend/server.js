@@ -1,28 +1,51 @@
-// Point d'entrée du serveur backend
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const connectDB = require('./config/db');
+/**
+ * @file Point d'entrée du serveur backend.
+ *
+ * Correction : le serveur n'écoute qu'une fois MongoDB connecté (avant, il acceptait
+ * des requêtes alors que la base n'était pas prête), et il s'arrête proprement sur
+ * SIGTERM/SIGINT (redéploiement Docker sans couper les requêtes en cours).
+ * @module server
+ */
+const config = require('./config/env');
+const logger = require('./config/logger');
+const { connectDB } = require('./config/db');
+const mongoose = require('mongoose');
+const app = require('./app');
 
-// Connexion à la base de données
-connectDB();
+/**
+ * Démarre la connexion à la base puis le serveur HTTP.
+ * @returns {Promise<http.Server>}
+ */
+async function start() {
+  await connectDB(config.mongoUri);
+  const server = app.listen(config.port, () => {
+    logger.info(`API démarrée sur le port ${config.port}`, { env: config.env });
+  });
 
-const app = express();
+  const shutdown = (signal) => {
+    logger.info(`${signal} reçu, arrêt en cours…`);
+    server.close(async () => {
+      await mongoose.connection.close();
+      logger.info('Arrêt terminé');
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+  return server;
+}
 
-// Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/tasks', require('./routes/tasks'));
-
-// Ce handler ne catch que les erreurs synchrones. Les erreurs dans les promesses ne sont pas gérées.
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Something broke!');
+process.on('unhandledRejection', (reason) => {
+  logger.error('Promesse rejetée non gérée', { reason: reason instanceof Error ? reason.stack : reason });
+});
+process.on('uncaughtException', (err) => {
+  logger.error('Exception non capturée, arrêt du processus', { stack: err.stack });
+  process.exit(1);
 });
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+start().catch((err) => {
+  logger.error('Impossible de démarrer le serveur', { error: err.message });
+  process.exit(1);
+});
